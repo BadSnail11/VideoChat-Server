@@ -56,11 +56,11 @@ namespace VideoChat_Server
                                 var targetId = new Guid(reader.ReadBytes(16));
                                 await HandleCallRequest(userId, targetId, writer);
                                 break;
-                            case 0x02: // Ответ на звонок
-                                var accept = reader.ReadBoolean();
-                                var callerId = new Guid(reader.ReadBytes(16));
-                                await HandleCallResponse(userId, callerId, accept, writer);
-                                break;
+                            //case 0x02: // Ответ на звонок
+                            //    var accept = reader.ReadBoolean();
+                            //    var callerId = new Guid(reader.ReadBytes(16));
+                            //    await HandleCallResponse(userId, callerId, accept, writer);
+                            //    break;
                         }
                     }
                 }
@@ -75,49 +75,56 @@ namespace VideoChat_Server
         {
             Console.WriteLine($"Звонок от {callerId} к {targetId}");
 
-            if (!_clients.TryGetValue(targetId, out var targetClient))
+            if (_clientEndPoints.TryGetValue(targetId, out var targetEndPoint))
             {
-                callerWriter.Write((byte)0xFF); // Ошибка
+                callerWriter.Write(targetEndPoint.Address.GetAddressBytes());
+                callerWriter.Write(targetEndPoint.Port);
+            }
+            else
+            {
+                callerWriter.Write(IPAddress.None.GetAddressBytes()); // Индикатор ошибки
                 return;
             }
 
-            // Отправляем запрос целевому клиенту
-            var targetStream = targetClient.GetStream();
-            var targetWriter = new BinaryWriter(targetStream);
-
-            targetWriter.Write((byte)0x01); // Команда "Входящий звонок"
-            targetWriter.Write(callerId.ToByteArray());
-
-            // Отправляем информацию о звонящем
-            if (_clientEndPoints.TryGetValue(callerId, out var callerEndPoint))
+            // 2. Уведомляем target о входящем звонке
+            if (_clients.TryGetValue(targetId, out var targetClient))
             {
-                targetWriter.Write(callerEndPoint.Address.GetAddressBytes());
-                targetWriter.Write(callerEndPoint.Port);
+                var targetStream = targetClient.GetStream();
+                var targetWriter = new BinaryWriter(targetStream);
+
+                targetWriter.Write((byte)0x01); // Код входящего звонка
+                targetWriter.Write(callerId.ToByteArray());
+
+                if (_clientEndPoints.TryGetValue(callerId, out var callerEndPoint))
+                {
+                    targetWriter.Write(callerEndPoint.Address.GetAddressBytes());
+                    targetWriter.Write(callerEndPoint.Port);
+                }
             }
         }
 
-        private static async Task HandleCallResponse(Guid calleeId, Guid callerId, bool accepted, BinaryWriter calleeWriter)
-        {
-            Console.WriteLine($"Ответ от {calleeId} для {callerId}: {accepted}");
+        //private static async Task HandleCallResponse(Guid calleeId, Guid callerId, bool accepted, BinaryWriter calleeWriter)
+        //{
+        //    Console.WriteLine($"Ответ от {calleeId} для {callerId}: {accepted}");
 
-            if (!_clients.TryGetValue(callerId, out var callerClient))
-            {
-                calleeWriter.Write((byte)0xFF); // Ошибка
-                return;
-            }
+        //    if (!_clients.TryGetValue(callerId, out var callerClient))
+        //    {
+        //        calleeWriter.Write((byte)0xFF); // Ошибка
+        //        return;
+        //    }
 
-            // Отправляем ответ звонящему
-            var callerStream = callerClient.GetStream();
-            var callerWriter = new BinaryWriter(callerStream);
+        //    // Отправляем ответ звонящему   
+        //    var callerStream = callerClient.GetStream();
+        //    var callerWriter = new BinaryWriter(callerStream);
 
-            callerWriter.Write((byte)0x02); // Команда "Ответ на звонок"
-            callerWriter.Write(accepted);
+        //    callerWriter.Write((byte)0x02); // Команда "Ответ на звонок"
+        //    callerWriter.Write(accepted);
 
-            if (accepted && _clientEndPoints.TryGetValue(calleeId, out var calleeEndPoint))
-            {
-                callerWriter.Write(calleeEndPoint.Address.GetAddressBytes());
-                callerWriter.Write(calleeEndPoint.Port);
-            }
-        }
+        //    if (accepted && _clientEndPoints.TryGetValue(calleeId, out var calleeEndPoint))
+        //    {
+        //        callerWriter.Write(calleeEndPoint.Address.GetAddressBytes());
+        //        callerWriter.Write(calleeEndPoint.Port);
+        //    }
+        //}
     }
 }
